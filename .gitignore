@@ -36,6 +36,7 @@ node_modules
 .tamagui
 .idea
 
+result.json
 .env
 # local env files
 .env.local
