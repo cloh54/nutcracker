@@ -37,6 +37,7 @@ node_modules
 .idea
 
 result.json
+result_2.json
 .env
 # local env files
 .env.local

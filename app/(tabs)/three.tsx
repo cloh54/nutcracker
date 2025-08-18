@@ -1,8 +1,7 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import Constants from 'expo-constants';
-import { useEffect, useRef, useState } from 'react';
-import { Dimensions } from 'react-native';
-import { Button, Card, Paragraph, Spinner, YStack } from 'tamagui';
+import { CameraView, useCameraPermissions } from 'expo-camera'
+import { useEffect, useRef, useState } from 'react'
+import { Dimensions } from 'react-native'
+import { Button, Card, Paragraph, Spinner, YStack } from 'tamagui'
 
 
 export default function TabTwoScreen() {
@@ -14,7 +13,6 @@ export default function TabTwoScreen() {
   useEffect(() => { if (!perm) requestPerm() }, [perm])
 
   async function snapAndSend() {
-    console.log('hello mark')
     try {
       setLoading(true)
       setStatus('capturing...')
@@ -22,33 +20,16 @@ export default function TabTwoScreen() {
       if (!photo?.base64) { setStatus('no photo'); return }
 
       setStatus('uploading...')
-      const apiUrl = Constants.expoConfig?.extra?.API_URL
-      if (!apiUrl) {
-        setStatus('error: API_URL not defined')
-        return
-      }
-
-      const requestOptions = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ receipt: photo.base64 })
-      };
-
-      console.log('Uploading to', apiUrl)
-      const resp = await fetch(`${apiUrl}/analyze/upload-receipt-azure`, requestOptions)
-      console.log('Uploaded, status:', resp.status, resp.statusText)
-      const data = await resp.json()
-      console.log('Response:', data)
-
-      if (!resp.ok) {
-        setStatus(`error: ${resp.status} ${resp.statusText}`);
-        return;
-      }
+      const resp = await fetch('https://httpbin.org/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mime: 'image/jpeg',
+          base64: photo.base64, // demo only
+        }),
+      })
       setStatus(`done: ${resp.status} ${resp.ok ? 'OK' : 'ERR'}`)
     } catch (e: any) {
-      console.log(e)
       setStatus(`error: ${String(e?.message || e)}`)
     } finally {
       setLoading(false)
@@ -76,6 +57,7 @@ export default function TabTwoScreen() {
       <Button size="$6" onPress={snapAndSend} disabled={loading} circular>
         {loading ? <Spinner /> : 'Snap & Send'}
       </Button>
+
       <Paragraph>Status: {status}</Paragraph>
     </YStack>
   )
