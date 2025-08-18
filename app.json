@@ -12,6 +12,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "extra": {
+      "API_URL": "https://nutcracker-backend-bceqa2hwgrgtcabr.eastus2-01.azurewebsites.net"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],

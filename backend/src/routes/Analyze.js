@@ -2,9 +2,9 @@ import { AzureKeyCredential, DocumentAnalysisClient } from "@azure/ai-form-recog
 import dotenv from 'dotenv';
 import express from 'express';
 import fs from "fs";
-import multer from 'multer';
 import path from 'path';
-import Tesseract from 'tesseract.js';
+import sharp from 'sharp';
+import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
@@ -16,9 +16,6 @@ console.log(__filename)
 const __dirname = path.dirname(__filename);
 console.log(__dirname)
 
-const app = express();
-const upload = multer({ dest: 'uploads/' });
-
 // Init Azure Document Intelligence client
 const endpoint = process.env.AZURE_DI_ENDPOINT;
 const key = process.env.AZURE_DI_KEY;
@@ -27,10 +24,10 @@ if (!endpoint || !key) {
     process.exit(1);
 }
 const client = new DocumentAnalysisClient(endpoint, new AzureKeyCredential(key));
-const TEST = TRUE
+const TEST = true;
 
 
-router.post("/upload-receipt-azure", upload.single("receipt"), async (req, res) => {
+router.post("/upload-receipt-azure", async (req, res) => {
     if (TEST) {
         try {
             const resultPath = path.join(__dirname, '../../result.json');
@@ -61,7 +58,6 @@ router.post("/upload-receipt-azure", upload.single("receipt"), async (req, res) 
                 tip: f("Tip"),
                 total: f("Total"),
                 items,
-                raw: result,
             };
 
             return res.json(payload);
@@ -71,10 +67,28 @@ router.post("/upload-receipt-azure", upload.single("receipt"), async (req, res) 
         }
     }
     try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        const base64 = req.body.receipt;
+        if (!base64) return res.status(400).json({ error: "No base64 data uploaded" });
 
-        // Read the uploaded image as a stream
-        const stream = fs.createReadStream(req.file.path);
+        // Convert base64 to buffer
+        const buffer = Buffer.from(base64, 'base64');
+
+        // Resize image using sharp (max width/height 1200px, JPEG quality 80)
+        const resizedBuffer = await sharp(buffer)
+            .resize({ width: 1200, height: 1200, fit: 'inside' })
+            .jpeg({ quality: 80 })
+            .toBuffer();
+
+        // Save resized image to disk
+        const uploadsDir = path.join(__dirname, '../../uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir);
+        }
+        const imagePath = path.join(uploadsDir, 'last_receipt.jpg');
+        fs.writeFileSync(imagePath, resizedBuffer);
+
+        // Create a readable stream from resized buffer
+        const stream = Readable.from(resizedBuffer);
 
         // Analyze with the prebuilt receipt model
         const poller = await client.beginAnalyzeDocument("prebuilt-receipt", stream);
@@ -106,99 +120,26 @@ router.post("/upload-receipt-azure", upload.single("receipt"), async (req, res) 
             totalTax: f("TotalTax"),
             tip: f("Tip"),
             total: f("Total"),
-            items,
-            // Full raw service response if you want to inspect everything
-            raw: result,
+            items
         };
-
+        console.log(payload);
         res.json(payload);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Receipt analysis failed" });
-    } finally {
-        // optional: clean up uploaded file
-        if (req?.file?.path) fs.unlink(req.file.path, () => { });
     }
+
 });
 
-router.post('/upload-receipt-tess', upload.single('receipt'), async (req, res) => {
-    try {
-        console.log('Received file:', req.file.path);
-        // one day i'll fix this
-        const imagePath = path.join(__dirname, '../../' + req.file.path);
 
-        // OCR processing
-        const { data: { text } } = await Tesseract.recognize(imagePath, 'eng');
-        console.log('OCR Result:', text);
-
-        // Example: extract total amount
-        // Extract fields using regex patterns
-        const merchantNameMatch = text.match(/(?:Store|Merchant|Name|Shop)\s*[:\-]?\s*(.+)/i);
-        const merchantName = merchantNameMatch ? merchantNameMatch[1].trim() : null;
-
-        const merchantPhoneMatch = text.match(/(?:Phone|Tel|Contact)\s*[:\-]?\s*([\d\-\(\)\s]+)/i);
-        const merchantPhoneNumber = merchantPhoneMatch ? merchantPhoneMatch[1].trim() : null;
-
-        const merchantAddressMatch = text.match(/(?:Address)\s*[:\-]?\s*(.+)/i);
-        const merchantAddress = merchantAddressMatch ? merchantAddressMatch[1].trim() : null;
-
-        const dateMatch = text.match(/(?:Date)\s*[:\-]?\s*([\d\/\-]+)/i);
-        const transactionDate = dateMatch ? dateMatch[1].trim() : null;
-
-        const timeMatch = text.match(/(?:Time)\s*[:\-]?\s*([\d:APMapm\s]+)/i);
-        const transactionTime = timeMatch ? timeMatch[1].trim() : null;
-
-        const subtotalMatch = text.match(/Subtotal\s*\$?([\d,.]+)/i);
-        const subtotal = subtotalMatch ? subtotalMatch[1] : null;
-
-        const totalTaxMatch = text.match(/(?:Tax|Total\s*Tax)\s*\$?([\d,.]+)/i);
-        const totalTax = totalTaxMatch ? totalTaxMatch[1] : null;
-
-        const tipMatch = text.match(/Tip\s*\$?([\d,.]+)/i);
-        const tip = tipMatch ? tipMatch[1] : null;
-
-        const totalMatch = text.match(/Total\s*\$?([\d,.]+)/i);
-        const total = totalMatch ? totalMatch[1] : null;
-
-        // Attempt to extract items (very basic, line by line)
-        const items = [];
-        const itemLines = text.split('\n').filter(line =>
-            /[a-zA-Z]/.test(line) && /[\d,.]+/.test(line) && !/Total|Subtotal|Tax|Tip/i.test(line)
-        );
-        itemLines.forEach(line => {
-            const itemMatch = line.match(/(.+?)\s+([\d,.]+)$/);
-            if (itemMatch) {
-                items.push({
-                    description: itemMatch[1].trim(),
-                    price: itemMatch[2].trim()
-                });
-            }
-        });
-
-        // Return all extracted fields
-        res.json({
-            merchantName,
-            merchantPhoneNumber,
-            merchantAddress,
-            transactionDate,
-            transactionTime,
-            subtotal,
-            totalTax,
-            tip,
-            total,
-            items,
-            rawText: text
-        });
-
-        res.json({
-            rawText: text,
-            total: total || 'Not found'
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Error reading receipt' });
+// Route to serve the last uploaded receipt image
+router.get('/last-receipt-image', (req, res) => {
+    const imagePath = path.join(__dirname, '../../uploads/last_receipt.jpg');
+    if (fs.existsSync(imagePath)) {
+        res.sendFile(imagePath);
+    } else {
+        res.status(404).send('No receipt image found');
     }
 });
-
 
 export default router;
