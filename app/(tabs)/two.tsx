@@ -1,8 +1,8 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Constants from 'expo-constants';
 import { useEffect, useRef, useState } from 'react';
-import { Dimensions } from 'react-native';
-import { Button, Card, Paragraph, Spinner, YStack } from 'tamagui';
+import { Dimensions, StyleSheet } from 'react-native';
+import { Button, Paragraph, Spinner, YStack } from 'tamagui';
 
 
 export default function TabTwoScreen() {
@@ -65,18 +65,53 @@ export default function TabTwoScreen() {
   }
 
   const { width } = Dimensions.get('window')
-  const camHeight = Math.round(width * 4 / 3) // 4:3 preview
 
   return (
-    <YStack style={{ flex: 1, padding: 12 }} gap="$3">
-      <Card bordered elevate style={{ width: '100%', height: camHeight, overflow: 'hidden', borderRadius: 12 }}>
-        <CameraView ref={camRef} style={{ width: '100%', height: '100%' }} facing="back" />
-      </Card>
+    <YStack flex={1} /* no padding so camera can truly fill */>
+      {/* Camera fills all available space between header and tab bar */}
+      <YStack flex={1}>
+        <CameraView
+          ref={camRef}
+          facing="back"
+          style={StyleSheet.absoluteFillObject} // absolute: top/left/right/bottom = 0
+        />
 
-      <Button size="$6" onPress={snapAndSend} disabled={loading} circular>
-        {loading ? <Spinner /> : 'Snap & Send'}
-      </Button>
-      <Paragraph>Status: {status}</Paragraph>
+        {/* Bottom-center capture button overlay */}
+        <YStack
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 24,              // or add safeInset.bottom
+            alignItems: 'center',
+            justifyContent: 'center',
+            // pointerEvents: 'box-none', // uncomment if overlays block touches
+          }}
+        >
+          <Button
+            size="$6"
+            onPress={snapAndSend}
+            disabled={loading}
+            // circular works if your config supports it; else use big borderRadius:
+            // circular
+            style={{ borderRadius: 999 }}
+          >
+            {loading ? <Spinner /> : 'Snap & Send'}
+          </Button>
+        </YStack>
+
+        {/* Optional: status overlay (top-left) */}
+        <YStack
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            right: 12,
+          }}
+        >
+          <Paragraph>Status: {status}</Paragraph>
+        </YStack>
+      </YStack>
     </YStack>
   )
 }
