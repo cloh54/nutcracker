@@ -1,7 +1,8 @@
 class Person {
-    constructor(id, name) {
-        this.id = id;
+    constructor(name) {
+        this.id = crypto.randomUUID(); // Generate a unique ID
         this.name = name;
+        this.history = {};
     }
 
     getId() {
@@ -10,5 +11,13 @@ class Person {
 
     getName() {
         return this.name;
+    }
+
+    setName(name) {
+        this.name = name;
+    }
+
+    getHistory() {
+        return this.history;
     }
 }
